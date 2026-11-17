@@ -26,15 +26,20 @@ internal sealed class TrayContext : IDisposable
         Action onExit,
         Func<Task<string?>> reload,
         Func<IReadOnlyList<Scheduler.NextRun>> upcoming,
-        Func<string, Scheduler.RunNowResult> runNow)
+        Func<string, Scheduler.RunNowResult> runNow,
+        bool autoStart)
     {
         _configPath = configPath;
         _upcoming = upcoming;
         _runNow = runNow;
 
-        _autoStartItem = new CheckItem { Text = "开机启动", Clicked = _ => ToggleAutoStart() };
+        _autoStartItem = new CheckItem
+        {
+            Text = "开机启动",
+            IsChecked = autoStart,
+            Clicked = _ => ToggleAutoStart(),
+        };
         _menu.Items.Add(_autoStartItem);
-        RefreshAutoStartState();
 
         _menu.Items.Add(new MenuItem { Text = "打开配置文件", Clicked = _ => OpenConfig() });
         _menu.Items.Add(new MenuItem { Text = "打开脚本目录", Clicked = _ => OpenFolder(Paths.Scripts) });
@@ -79,8 +84,6 @@ internal sealed class TrayContext : IDisposable
     /// </summary>
     private void RefreshUpcoming()
     {
-        RefreshAutoStartState();
-
         foreach (var item in _upcomingItems)
         {
             _menu.Items.Remove(item);
@@ -137,37 +140,44 @@ internal sealed class TrayContext : IDisposable
             ? $"{notification.Task} 超时（exit={notification.Exit}）"
             : $"{notification.Task} exit={notification.Exit}";
 
-    /// <summary>注册表被外部改过（例如系统设置里禁用启动项），每次弹菜单前重新读一次。</summary>
-    private void RefreshAutoStartState()
+    /// <summary>
+    /// 按 config.autostart 更新勾选并同步 Run 键。配置是唯一事实来源，
+    /// 注册表写失败只提示不动勾选——下次启动会再试一次。
+    /// </summary>
+    internal void ApplyAutoStart(bool enabled)
     {
+        _autoStartItem.IsChecked = enabled;
         try
         {
-            _autoStartItem.IsChecked = AutoStart.IsEnabled();
+            AutoStart.Sync(enabled);
         }
         catch (Exception ex)
         {
-            // 读不到就保持上一次的显示，不影响菜单其余部分
-            Log.Event("autostart-read-failed", ("message", ex.Message));
+            Log.Event("autostart-sync-failed", ("message", ex.Message));
+            ShowError($"同步开机启动失败：{ex.Message}");
         }
     }
 
     /// <summary>
     /// 切换开机启动。DotTray 在触发 Clicked 之前已经把 CheckItem.IsChecked 翻过，
-    /// 所以这里读到的就是目标状态；写注册表失败要把勾选翻回去。
+    /// 所以这里读到的就是目标状态。先落盘 config，再按它修正注册表。
     /// </summary>
     private void ToggleAutoStart()
     {
         bool enable = _autoStartItem.IsChecked;
         try
         {
-            AutoStart.Set(enable);
-            Log.Event("autostart", ("enabled", enable));
+            ConfigLoader.SetAutoStart(_configPath, enable);
         }
         catch (Exception ex)
         {
             _autoStartItem.IsChecked = !enable;
-            ShowError($"设置开机启动失败：{ex.Message}");
+            ShowError($"保存开机启动设置失败：{ex.Message}");
+            return;
         }
+
+        ApplyAutoStart(enable);
+        Log.Event("autostart", ("enabled", enable));
     }
 
     /// <summary>

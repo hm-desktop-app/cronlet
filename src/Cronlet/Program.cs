@@ -56,6 +56,17 @@ internal static class Program
             return ExitConfigError;
         }
 
+        // 注册表只是 config.autostart 的投影：程序换目录后，这里会把旧路径纠正过来
+        try
+        {
+            AutoStart.Sync(config.autostart);
+        }
+        catch (Exception ex)
+        {
+            // 托盘还没建起来，这里只记日志；不影响调度
+            Log.Event("autostart-sync-failed", ("message", ex.Message));
+        }
+
         using var cts = new CancellationTokenSource();
         var scheduler = new Scheduler(config, cts.Token);
         scheduler.Start();
@@ -83,6 +94,7 @@ internal static class Program
                             ConfigValidator.Validate(newConfig);
                             string? error = await scheduler.ReloadAsync(newConfig);
                             if (error is not null) return error;
+                            tray?.ApplyAutoStart(newConfig.autostart);
                             Log.Event("config-reload", ("tasks", newConfig.tasks.Count(x => x.enabled)));
                             return null;
                         }
@@ -93,7 +105,8 @@ internal static class Program
                         }
                     },
                     scheduler.GetUpcoming,
-                    scheduler.RunNow);
+                    scheduler.RunNow,
+                    config.autostart);
 
                 scheduler.NotificationSink = tray.ShowTaskNotification;
             }

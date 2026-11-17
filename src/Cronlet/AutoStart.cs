@@ -22,6 +22,16 @@ internal static class AutoStart
                && string.Equals(value.Trim(), CommandLine, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// 按配置值修正 Run 键：真则指向当前 exe，假则删掉。
+    /// 已经一致时不动，避免每次启动都写一遍注册表。
+    /// </summary>
+    internal static void Sync(bool enabled)
+    {
+        if (enabled == IsEnabled()) return;
+        Set(enabled);
+    }
+
     internal static void Set(bool enabled)
     {
         using var key = Registry.CurrentUser.CreateSubKey(RunKeyPath, writable: true)

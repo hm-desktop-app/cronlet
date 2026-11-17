@@ -33,14 +33,16 @@ cwd = ""
 
 `command` 是唯一入口，写完整调用：`pwsh -File ./scripts/xxx.ps1`、`python -X utf8 ./scripts/xxx.py`、`echo hello` 都可以。Cronlet 不再替你选解释器，也不预检命令能否运行——起不来就是一次非 0 退出。
 
-`upcoming`、`notify_if`、`notify_if_not` 是全局配置项（与 `[[tasks]]` 同级）：
+`autostart`、`upcoming`、`notify_if`、`notify_if_not` 是全局配置项（与 `[[tasks]]` 同级）：
 
+- `autostart` 控制是否随登录启动，默认 false。它是唯一事实来源：每次启动按它写或删 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` 里的 `Cronlet`，所以程序目录被搬走后，下次启动就会把注册表里的旧路径改过来。托盘菜单里的“开机启动”改的也是这一项。
 - `upcoming` 控制托盘菜单顶部最多列出多少个待触发任务，默认 10，必须大于 0。
 - `notify_if` / `notify_if_not` 决定任务结束时哪些退出码弹托盘通知：先看 `notify_if_not`（命中就不弹），再看 `notify_if`（非空时只认它里面的），都不受限就弹。默认 `notify_if = []`、`notify_if_not = [0]`，即非 0 退出才提醒；两者都能在单个任务里覆盖。超时按 `exit = -1` 参与判定。
 
 只有退出码与上一次不同才真的弹，所以连续同样的失败只提醒一次；中途成功一次、再次失败会重新提醒。
 
 ```toml
+autostart = false
 upcoming = 10
 
 notify_if = []
@@ -83,10 +85,9 @@ notify_if_not = [0]
 
 ## 开机启动
 
-两种方式，选一种即可：
+`autostart = true` 时程序在 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` 里维护一个 `Cronlet` 值，内容就是当前 exe 的完整路径；当前用户登录后拉起托盘实例。托盘菜单的“开机启动”是它的开关，点击时先写回 `config.toml`，再按新值修正注册表——注册表这一步失败也不影响配置，下次启动会补上。
 
-- 托盘菜单勾选“开机启动”：在 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` 写入 `Cronlet`，值就是当前 exe 的完整路径；取消勾选删除该值。当前用户登录后拉起托盘实例。
-- 任务计划程序：触发器“启动时”，操作 `Cronlet.exe --headless`，勾选“不管用户是否登录都要运行”。不依赖登录会话，适合后台常驻。
+另一种方式不依赖登录会话：任务计划程序，触发器“启动时”，操作 `Cronlet.exe --headless`，勾选“不管用户是否登录都要运行”。
 
 ## 日志
 

@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using Tomlyn;
 using Tomlyn.Serialization;
 
@@ -13,6 +14,12 @@ internal partial class TomlContext : TomlSerializerContext;
 /// </summary>
 internal sealed class RunnerConfig
 {
+    /// <summary>
+    /// 是否随登录启动。这是唯一的事实来源：程序启动时按它写/删 Run 键，
+    /// 所以程序目录被移动后，下一次启动就能把注册表里的旧路径纠正过来。
+    /// </summary>
+    public bool autostart { get; set; }
+
     /// <summary>托盘菜单顶部最多列出多少个待触发任务。</summary>
     public int upcoming { get; set; } = 10;
 
@@ -34,7 +41,7 @@ internal sealed class TaskConfig
     public string name { get; set; } = "";
     public bool enabled { get; set; } = true;
 
-    /// <summary>要执行的 pwsh 命令。相对路径以 <see cref="Paths.Base"/> 为当前目录。</summary>
+    /// <summary>要执行的完整命令行（交给 cmd）。相对路径以 <see cref="Paths.Base"/> 为当前目录。</summary>
     public string command { get; set; } = "";
 
     public string cron { get; set; } = "";
@@ -54,7 +61,7 @@ internal sealed class TaskConfig
     public Dictionary<string, object>? extra { get; set; }
 }
 
-internal static class ConfigLoader
+internal static partial class ConfigLoader
 {
     public static string ConfigPath => Path.Combine(Paths.Base, "config.toml");
 
@@ -76,6 +83,11 @@ internal static class ConfigLoader
 #   overlap     上次未结束时的策略：skip | kill | queue
 #   cwd         工作目录；空则用 exe 目录
 # ==============================================================
+
+# 可选：是否随登录启动（默认 false）。程序启动时按这个值写/删
+# HKCU\Software\Microsoft\Windows\CurrentVersion\Run，托盘菜单里的
+# "开机启动"改的也是这一项。
+# autostart = false
 
 # 可选：托盘菜单顶部最多列出多少个待触发任务（默认 10）
 # upcoming = 10
@@ -112,6 +124,48 @@ cwd = ""                            # 工作目录，空则用 exe 目录
     {
         EnsureExists(path);
         return Parse(File.ReadAllText(path));
+    }
+
+    /// <summary>
+    /// 只改顶层 autostart 那一行，文件其余内容和注释原样保留。
+    /// Run 键是派生状态，由启动时的 <see cref="AutoStart.Sync"/> 按这里的值修正。
+    /// </summary>
+    internal static void SetAutoStart(string path, bool enabled)
+    {
+        string text = SetAutoStartText(File.ReadAllText(path), enabled);
+        string temp = path + ".tmp";
+        File.WriteAllText(temp, text, new UTF8Encoding(false));
+        File.Move(temp, path, overwrite: true);
+    }
+
+    [GeneratedRegex(@"^([ \t]*)autostart[ \t]*=[^\r\n]*", RegexOptions.Multiline | RegexOptions.CultureInvariant)]
+    private static partial Regex AutoStartLine();
+
+    [GeneratedRegex(@"^[ \t]*\[", RegexOptions.Multiline | RegexOptions.CultureInvariant)]
+    private static partial Regex TableStart();
+
+    /// <summary>
+    /// 把文本里顶层的 autostart 改成给定值；没有这一行就插到第一个表定义之前。
+    /// 只认行首，所以注释里出现的 autostart 字面量不受影响。
+    /// </summary>
+    internal static string SetAutoStartText(string text, bool enabled)
+    {
+        string value = enabled ? "true" : "false";
+        string newline = text.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
+
+        // 表层从第一个非注释的 "[..." 行开始，之前的部分只允许放顶层键
+        var table = TableStart().Match(text);
+        string head = table.Success ? text[..table.Index] : text;
+        string rest = table.Success ? text[table.Index..] : "";
+
+        if (AutoStartLine().IsMatch(head))
+        {
+            // $1 是原来的缩进：只改值，不动排版
+            return AutoStartLine().Replace(head, "$1autostart = " + value, 1) + rest;
+        }
+
+        string prefix = head.Length > 0 && !head.EndsWith(newline, StringComparison.Ordinal) ? head + newline : head;
+        return prefix + "autostart = " + value + newline + rest;
     }
 
     internal static RunnerConfig Parse(string text)

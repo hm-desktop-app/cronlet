@@ -15,8 +15,87 @@ public class ConfigLoaderTests
         Assert.Equal("pwsh -File ./scripts/example.ps1", task.command);
         Assert.Equal("*/5 * * * *", task.cron);
         Assert.Equal(10, task.jitter);
+        Assert.False(config.autostart); // 模板里是注释掉的，默认不随登录启动
         Assert.Equal(60, task.timeout);
         Assert.Equal("skip", task.overlap);
+    }
+
+    [Fact]
+    public void AutoStart_is_read_from_the_file()
+    {
+        var config = ConfigLoader.Parse("autostart = true\n");
+        Assert.True(config.autostart);
+    }
+
+    [Fact]
+    public void SetAutoStartText_replaces_the_existing_line()
+    {
+        const string text = "autostart = true\n\n[[tasks]]\nname = \"a\"\n";
+
+        string updated = ConfigLoader.SetAutoStartText(text, false);
+
+        Assert.Equal("autostart = false\n\n[[tasks]]\nname = \"a\"\n", updated);
+        Assert.False(ConfigLoader.Parse(updated).autostart);
+    }
+
+    [Fact]
+    public void SetAutoStartText_keeps_indentation_of_the_replaced_line()
+    {
+        const string text = "upcoming = 5\n  autostart = true\n[[tasks]]\nname = \"a\"\n";
+
+        string updated = ConfigLoader.SetAutoStartText(text, false);
+
+        Assert.Equal("upcoming = 5\n  autostart = false\n[[tasks]]\nname = \"a\"\n", updated);
+    }
+
+    [Fact]
+    public void SetAutoStartText_inserts_before_the_first_table()
+    {
+        const string text = "# 说明\n\n[[tasks]]\nname = \"a\"\n";
+
+        string updated = ConfigLoader.SetAutoStartText(text, true);
+
+        Assert.Equal("# 说明\n\nautostart = true\n[[tasks]]\nname = \"a\"\n", updated);
+        Assert.True(ConfigLoader.Parse(updated).autostart);
+    }
+
+    [Fact]
+    public void SetAutoStartText_appends_when_there_is_no_table()
+    {
+        const string text = "upcoming = 5\n";
+
+        Assert.Equal("upcoming = 5\nautostart = true\n", ConfigLoader.SetAutoStartText(text, true));
+    }
+
+    [Fact]
+    public void SetAutoStartText_ignores_commented_lines()
+    {
+        const string text = "# autostart = false\n# 用来开关开机启动\n[[tasks]]\nname = \"a\"\n";
+
+        string updated = ConfigLoader.SetAutoStartText(text, true);
+
+        Assert.Equal("# autostart = false\n# 用来开关开机启动\nautostart = true\n[[tasks]]\nname = \"a\"\n", updated);
+    }
+
+    [Fact]
+    public void SetAutoStartText_keeps_crlf()
+    {
+        const string text = "upcoming = 5\r\n\r\n[[tasks]]\r\nname = \"a\"\r\n";
+
+        string updated = ConfigLoader.SetAutoStartText(text, true);
+
+        Assert.Equal("upcoming = 5\r\n\r\nautostart = true\r\n[[tasks]]\r\nname = \"a\"\r\n", updated);
+    }
+
+    [Fact]
+    public void SetAutoStartText_is_idempotent()
+    {
+        const string text = "autostart = true\n[[tasks]]\nname = \"a\"\n";
+
+        string once = ConfigLoader.SetAutoStartText(text, true);
+
+        Assert.Equal("autostart = true\n[[tasks]]\nname = \"a\"\n", once);
+        Assert.Equal(once, ConfigLoader.SetAutoStartText(once, true));
     }
 
     [Fact]
