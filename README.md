@@ -132,8 +132,8 @@ dotnet publish src/Cronlet/Cronlet.csproj -c Release -r win-x64 -p:PublishAot=tr
 打 `v*` 标签推送会触发 CI 发布正式 release，框架依赖版和 NativeAOT 版都会作为资产挂上去：
 
 ```powershell
-git tag v0.2.0
-git push origin v0.2.0
+git tag v2026.11.17-1
+git push origin v2026.11.17-1
 ```
 
 重跑同一标签的工作流会覆盖已有资产，不会因标签已存在而失败。

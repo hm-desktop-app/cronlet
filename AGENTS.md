@@ -64,6 +64,11 @@ code-reviews/
 
 用户要求暂不提交时，保留工作区改动并列明未提交内容。
 
+## 构建与部署
+
+- 版本号形式 `yyyy.MM.dd-N`：日期为发版当天，`N` 是当日第几个发版构建，从 1 开始；写在 `src/Cronlet/Cronlet.csproj` 的 `<Version>`，标签为 `v<版本>`。
+- 每次构建通过后一律用 `publish.ps1` 覆盖 `S:\local\app\cronlet\content`，让 live 跟上当前代码；替换前先停掉运行中的实例。
+
 ## 触发约定
 
 用户单独说"继续"时，先列出 `code-reviews/` 下的目录，检查是否出现还没有 `RESPONSE.md` 的审查；有新审查就先按本流程处理，没有才继续上一轮的待办。
