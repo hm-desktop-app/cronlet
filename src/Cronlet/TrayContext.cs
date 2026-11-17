@@ -7,7 +7,7 @@ using DotTray.Items;
 namespace HiroMuraki.Cronlet;
 
 /// <summary>
-/// 托盘外壳：打开配置文件 / 打开脚本目录 / 打开日志目录 / 重载配置 / 退出。
+/// 托盘外壳：开机启动（开关）/ 打开配置文件 / 打开脚本目录 / 打开日志目录 / 重载配置 / 退出。
 /// 基于 DotTray（直接用 Win32 shell API），不依赖 WinForms，因此可以走 NativeAOT。
 /// 图标从 exe 自身的图标资源里取 HICON，不需要额外的 .ico 文件。
 /// </summary>
@@ -19,6 +19,7 @@ internal sealed class TrayContext : IDisposable
     private readonly Func<IReadOnlyList<Scheduler.NextRun>> _upcoming;
     private readonly Func<string, Scheduler.RunNowResult> _runNow;
     private readonly List<ItemBase> _upcomingItems = [];
+    private readonly CheckItem _autoStartItem;
 
     public TrayContext(
         string configPath,
@@ -30,6 +31,10 @@ internal sealed class TrayContext : IDisposable
         _configPath = configPath;
         _upcoming = upcoming;
         _runNow = runNow;
+
+        _autoStartItem = new CheckItem { Text = "开机启动", Clicked = _ => ToggleAutoStart() };
+        _menu.Items.Add(_autoStartItem);
+        RefreshAutoStartState();
 
         _menu.Items.Add(new MenuItem { Text = "打开配置文件", Clicked = _ => OpenConfig() });
         _menu.Items.Add(new MenuItem { Text = "打开脚本目录", Clicked = _ => OpenFolder(Paths.Scripts) });
@@ -74,6 +79,8 @@ internal sealed class TrayContext : IDisposable
     /// </summary>
     private void RefreshUpcoming()
     {
+        RefreshAutoStartState();
+
         foreach (var item in _upcomingItems)
         {
             _menu.Items.Remove(item);
@@ -129,6 +136,39 @@ internal sealed class TrayContext : IDisposable
         notification.TimedOut
             ? $"{notification.Task} 超时（exit={notification.Exit}）"
             : $"{notification.Task} exit={notification.Exit}";
+
+    /// <summary>注册表被外部改过（例如系统设置里禁用启动项），每次弹菜单前重新读一次。</summary>
+    private void RefreshAutoStartState()
+    {
+        try
+        {
+            _autoStartItem.IsChecked = AutoStart.IsEnabled();
+        }
+        catch (Exception ex)
+        {
+            // 读不到就保持上一次的显示，不影响菜单其余部分
+            Log.Event("autostart-read-failed", ("message", ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// 切换开机启动。DotTray 在触发 Clicked 之前已经把 CheckItem.IsChecked 翻过，
+    /// 所以这里读到的就是目标状态；写注册表失败要把勾选翻回去。
+    /// </summary>
+    private void ToggleAutoStart()
+    {
+        bool enable = _autoStartItem.IsChecked;
+        try
+        {
+            AutoStart.Set(enable);
+            Log.Event("autostart", ("enabled", enable));
+        }
+        catch (Exception ex)
+        {
+            _autoStartItem.IsChecked = !enable;
+            ShowError($"设置开机启动失败：{ex.Message}");
+        }
+    }
 
     /// <summary>
     /// 点条目立即跑一次。不改计划：到点仍然会按队列再跑一次。
