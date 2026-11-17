@@ -28,8 +28,6 @@ jobs:
         uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 11.0.x
-          # .NET 11 仍是 RC；GA 之后删掉这一行
-          dotnet-quality: preview
 
       - name: Build
         run: dotnet build Cronlet.slnx -c Release --nologo
