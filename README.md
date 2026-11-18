@@ -98,7 +98,7 @@ JSONL，每行一个 JSON，首字段固定为 `ts`（RFC3339 带时区）：
 | `logs/runner.jsonl` | Runner 事件（start / task-start / task-end / 错误等） |
 | `logs/task-<name>.jsonl` | 对应任务的 stdout / stderr |
 
-高低水位：文件超过 **16MB** 时裁剪到最近 **8MB**（只保留完整记录，不切坏 JSON）。
+高低水位：文件超过 **4MB** 时裁剪到最近 **2MB**（只保留完整记录，不切坏 JSON）。
 单条输出超过 **8 KiB（UTF-8 字节）** 会被截断并附上 …[truncated]，截断点落在完整字符边界上，不会切出半个字符。
 
 ## 目录结构

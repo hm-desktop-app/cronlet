@@ -7,13 +7,13 @@ namespace HiroMuraki.Cronlet;
 /// JSONL 日志（每行一个 JSON，首字段固定为 RFC3339 带时区的 ts）：
 ///   logs/runner.jsonl      —— Runner 自身事件
 ///   logs/task-&lt;name&gt;.jsonl —— 每个任务的 stdout/stderr
-/// 每次写入时打开、写完即关闭；按高低水位轮转：超过 16MB 时裁剪到最近 8MB。
+/// 每次写入时打开、写完即关闭；按高低水位轮转：超过 4MB 时裁剪到最近 2MB。
 /// 单条输出行超过 <see cref="MaxLineBytes"/> 会被截断，避免一条巨行把窗口挤满、
 /// 让轮转把整份历史清掉。
 /// </summary>
 internal static class Log
 {
-    private const long HighWatermark = 16L * 1024 * 1024;
+    private const long HighWatermark = 4L * 1024 * 1024;
     private const long LowWatermark = HighWatermark / 2;
 
     /// <summary>单条输出保留的最大 UTF-8 字节数（不含截断标记）。</summary>
